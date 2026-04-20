@@ -63,6 +63,14 @@ void Error_Handler(void);
 #define LED_RED_GPIO_Port GPIOB
 #define LED_BLUE_Pin GPIO_PIN_1
 #define LED_BLUE_GPIO_Port GPIOB
+#define KEY_1_Pin GPIO_PIN_12
+#define KEY_1_GPIO_Port GPIOB
+#define KEY_2_Pin GPIO_PIN_13
+#define KEY_2_GPIO_Port GPIOB
+#define KEY_3_Pin GPIO_PIN_14
+#define KEY_3_GPIO_Port GPIOB
+#define KEY_4_Pin GPIO_PIN_15
+#define KEY_4_GPIO_Port GPIOB
 #define LED_GREEN_Pin GPIO_PIN_8
 #define LED_GREEN_GPIO_Port GPIOA
 

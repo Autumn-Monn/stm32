@@ -21,6 +21,7 @@ typedef enum
 {
   SYS_STATUS_NORMAL = 0,
   SYS_STATUS_DRY,
+  SYS_STATUS_COLD,
   SYS_STATUS_HOT
 } sys_status_t;
 

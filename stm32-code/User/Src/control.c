@@ -135,14 +135,23 @@ static void control_auto_logic(void)
     }
   }
 
-  /* --- status: DRY when below soil_high%, HOT when above temp_low --- */
-  if (soil_pct < g_ctrl.thresh.soil_high)
+  /* --- status priority: extreme dry > over-temp > low-temp > dry warn > normal ---
+     spec (3): 三色LED 红=缺水 蓝=低温 绿=正常; 报警=极端干燥 或 超温 */
+  if (soil_pct < g_ctrl.thresh.soil_low)
   {
     g_ctrl.status = SYS_STATUS_DRY;
   }
-  else if (ds18b20_is_valid() && temp > temp_low_raw)
+  else if (ds18b20_is_valid() && temp > temp_high_raw)
   {
     g_ctrl.status = SYS_STATUS_HOT;
+  }
+  else if (ds18b20_is_valid() && temp < temp_low_raw)
+  {
+    g_ctrl.status = SYS_STATUS_COLD;
+  }
+  else if (soil_pct < g_ctrl.thresh.soil_high)
+  {
+    g_ctrl.status = SYS_STATUS_DRY;
   }
   else
   {
@@ -181,21 +190,27 @@ static void control_update_led(void)
       break;
 
     case SYS_STATUS_DRY:
+      /* 红=缺水: 极端干燥(报警)时闪烁, 普通缺水常亮 */
       led_off(LED_GREEN);
+      led_off(LED_BLUE);
       if (g_ctrl.alarm_active)
         led_toggle(LED_RED);
       else
         led_on(LED_RED);
-      led_off(LED_BLUE);
+      break;
+
+    case SYS_STATUS_COLD:
+      /* 蓝=低温: 常亮指示, 低温本身不触发蜂鸣报警 */
+      led_off(LED_GREEN);
+      led_off(LED_RED);
+      led_on(LED_BLUE);
       break;
 
     case SYS_STATUS_HOT:
+      /* 超温报警: 红灯闪烁 + 蜂鸣器(见 control_update_alarm), OLED 显示"高温" */
       led_off(LED_GREEN);
-      led_off(LED_RED);
-      if (g_ctrl.alarm_active)
-        led_toggle(LED_BLUE);
-      else
-        led_on(LED_BLUE);
+      led_off(LED_BLUE);
+      led_toggle(LED_RED);
       break;
   }
 }
@@ -385,6 +400,7 @@ static void control_log_status_change(sys_status_t old_st)
   {
     case SYS_STATUS_NORMAL: debug_uart_send_line("NORMAL"); break;
     case SYS_STATUS_DRY:    debug_uart_send_line("DRY");    break;
+    case SYS_STATUS_COLD:   debug_uart_send_line("COLD");   break;
     case SYS_STATUS_HOT:    debug_uart_send_line("HOT");    break;
   }
 }

@@ -42,6 +42,7 @@ typedef enum
   HZ_BAO,
   HZ_CUN,
   HZ_SHANG,
+  HZ_DI,
   HZ_COUNT
 } hz_index_t;
 

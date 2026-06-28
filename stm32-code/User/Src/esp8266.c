@@ -35,23 +35,24 @@ static const char *g_at_expect  = NULL;
 static uint32_t    g_at_timeout = 0U;
 static uint32_t    g_at_start   = 0U;
 
-/* ---- Connection sequence state ---- */
+/* ---- 连接序列状态机 ---- */
 static esp_conn_state_t g_conn_state = ESP_CONN_IDLE;
 static uint32_t         g_conn_tick  = 0U;
 static uint8_t          g_retry_cnt  = 0U;
 
-/* ---- MQTT publish state ---- */
-static uint32_t g_pub_tick = 0U;
-static char     g_pub_payload[256];
+/* ---- MQTT 发布状态 ---- */
+static uint32_t g_pub_tick = 0U;        /* 上次发布时间戳 */
+static char     g_pub_payload[256];     /* 上报数据载荷缓冲区 */
 
-/* ---- MQTT reply state ---- */
-static char     g_reply_payload[64];
-static uint8_t  g_reply_pending = 0U;
+/* ---- MQTT 回复状态 ---- */
+static char     g_reply_payload[64];    /* 下行回复载荷缓存 */
+static uint8_t  g_reply_pending = 0U;   /* 待发送回复标志 */
 
 /* ================================================================
  *  内部函数 - AT 引擎
  * ================================================================ */
 
+/* 清空接收缓冲区（关中断保护） */
 static void rx_buf_clear(void)
 {
   __disable_irq();
@@ -62,6 +63,7 @@ static void rx_buf_clear(void)
 
 #define UART_TX_TIMEOUT_MS  50U
 
+/* 发送 AT 命令并等待期望响应 */
 static void at_send(const char *cmd, const char *expect, uint32_t timeout_ms)
 {
   rx_buf_clear();
@@ -73,6 +75,7 @@ static void at_send(const char *cmd, const char *expect, uint32_t timeout_ms)
   g_at_state   = AT_WAIT_RESP;
 }
 
+/* 检查 AT 响应：返回 1=匹配期望，2=超时，0=等待中 */
 static uint8_t at_check(void)
 {
   if (g_at_state != AT_WAIT_RESP)
@@ -99,6 +102,7 @@ static uint8_t at_check(void)
  *  内部函数 - WiFi 连接
  * ================================================================ */
 
+/* 硬件复位 ESP8266（拉低 RST 引脚） */
 static void hw_reset_start(void)
 {
   HAL_GPIO_WritePin(ESP8266_RST_GPIO_Port, ESP8266_RST_Pin, GPIO_PIN_RESET);
@@ -107,6 +111,7 @@ static void hw_reset_start(void)
   g_retry_cnt  = 0U;
 }
 
+/* 发送 AT+CWJAP 连接 WiFi */
 static void start_cwjap(void)
 {
   static char cmd[128];
@@ -120,6 +125,7 @@ static void start_cwjap(void)
  *  内部函数 - MQTT 连接
  * ================================================================ */
 
+/* 配置 MQTT 用户信息（产品ID、设备名、密钥） */
 static void start_mqtt_usercfg(void)
 {
   static char cmd[320];
@@ -130,6 +136,7 @@ static void start_mqtt_usercfg(void)
   g_conn_state = ESP_CONN_MQTT_USERCFG;
 }
 
+/* 连接 MQTT 服务器 */
 static void start_mqtt_conn(void)
 {
   static char cmd[80];
@@ -139,6 +146,7 @@ static void start_mqtt_conn(void)
   g_conn_state = ESP_CONN_MQTT_CONN;
 }
 
+/* 订阅属性设置回复主题 */
 static void start_mqtt_sub1(void)
 {
   static char cmd[96];
@@ -149,6 +157,7 @@ static void start_mqtt_sub1(void)
   g_conn_state = ESP_CONN_MQTT_SUB1;
 }
 
+/* 订阅属性设置下行命令主题 */
 static void start_mqtt_sub2(void)
 {
   static char cmd[96];
@@ -163,6 +172,7 @@ static void start_mqtt_sub2(void)
  *  内部函数 - MQTT 数据上报
  * ================================================================ */
 
+/* 构造 MQTT 数据上报 JSON 载荷 */
 static void mqtt_build_payload(void)
 {
   int16_t temp_int  = g_ctrl.temp_raw / 16;
@@ -187,6 +197,7 @@ static void mqtt_build_payload(void)
     (unsigned)g_ctrl.status);
 }
 
+/* 发送 MQTTPUBRAW 命令，启动数据上报 */
 static void mqtt_start_pub_cmd(void)
 {
   static char cmd[128];
@@ -198,6 +209,7 @@ static void mqtt_start_pub_cmd(void)
   g_conn_state = ESP_PUB_CMD;
 }
 
+/* 发送 MQTTPUBRAW 命令，返回下行指令回复 */
 static void mqtt_start_reply_cmd(void)
 {
   static char cmd[128];
@@ -225,6 +237,7 @@ static int mqtt_parse_value(const char *json, const char *key_colon)
   return atoi(p);
 }
 
+/* 检查并解析收到的下行属性设置命令 */
 static void mqtt_check_downlink(void)
 {
   char *p = strstr(g_rx_buf, "+MQTTSUBRECV:");
@@ -292,6 +305,7 @@ static void mqtt_check_downlink(void)
  *  内部函数 - 断线检测
  * ================================================================ */
 
+/* 检测 MQTT 断线或 WiFi 断连，发现后进入错误恢复状态 */
 static uint8_t mqtt_check_disconnect(void)
 {
   if (strstr(g_rx_buf, "+MQTTDISCONNECTED:") != NULL ||
@@ -309,6 +323,7 @@ static uint8_t mqtt_check_disconnect(void)
  *  公共 API 接口
  * ================================================================ */
 
+/* 初始化 ESP8266：使能 RST、清缓冲区、启动UART接收中断、硬件复位 */
 void esp8266_init(void)
 {
   HAL_GPIO_WritePin(ESP8266_RST_GPIO_Port, ESP8266_RST_Pin, GPIO_PIN_SET);
@@ -320,6 +335,7 @@ void esp8266_init(void)
   hw_reset_start();
 }
 
+/* UART 接收中断回调：逐字节存入环形缓冲区 */
 void esp8266_rx_callback(void)
 {
   if (g_rx_len < (ESP_RX_BUF_SIZE - 1U))
@@ -329,6 +345,10 @@ void esp8266_rx_callback(void)
   }
   HAL_UART_Receive_IT(&huart1, &g_rx_byte, 1);
 }
+
+/*===============================================================*
+ *  主循环任务：驱动 WiFi 连接、MQTT 通信与数据上报
+ *===============================================================*/
 
 void esp8266_task(void)
 {
@@ -613,6 +633,7 @@ void esp8266_task(void)
   }
 }
 
+/* 查询 ESP8266 是否处于通信正常状态 */
 uint8_t esp8266_is_connected(void)
 {
   return (g_conn_state == ESP_CONN_MQTT_OK ||
@@ -622,11 +643,13 @@ uint8_t esp8266_is_connected(void)
           g_conn_state == ESP_REPLY_DATA) ? 1U : 0U;
 }
 
+/* MQTT 连接状态查询（别名） */
 uint8_t esp8266_mqtt_is_connected(void)
 {
   return esp8266_is_connected();
 }
 
+/* 获取当前连接状态 */
 esp_conn_state_t esp8266_get_state(void)
 {
   return g_conn_state;

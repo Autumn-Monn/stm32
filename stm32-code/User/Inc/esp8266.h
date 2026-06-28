@@ -19,7 +19,7 @@ extern "C" {
 #define MQTT_PORT          1883
 
 /* ---- 上报间隔 ---- */
-#define MQTT_PUBLISH_INTERVAL_MS  30000U
+#define MQTT_PUBLISH_INTERVAL_MS  30000U      // 30 秒上报一次
 
 typedef enum
 {

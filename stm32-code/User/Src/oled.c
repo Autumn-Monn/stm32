@@ -290,6 +290,10 @@ static void oled_show_run_screen(void)
       if (g_ctrl.alarm_active)
         oled_show_string(3, 72, "!");
       break;
+    case SYS_STATUS_COLD:
+      oled_show_hz(3, 40, HZ_DI);
+      oled_show_hz(3, 56, HZ_WEN);
+      break;
     case SYS_STATUS_HOT:
       oled_show_hz(3, 40, HZ_GAO);
       oled_show_hz(3, 56, HZ_WEN);

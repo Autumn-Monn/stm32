@@ -8,26 +8,29 @@
 #include "debug_uart.h"
 #include "data_store.h"
 
-#define CONTROL_PERIOD_MS       100U
-#define ALARM_TOGGLE_MS         300U
-#define TEMP_HYSTERESIS_RAW     32      /* 2C * 16 = 32 raw units */
+#define CONTROL_PERIOD_MS       100U      /* 控制任务执行周期（毫秒） */
+#define ALARM_TOGGLE_MS         300U      /* 报警蜂鸣器翻转间隔（毫秒） */
+#define TEMP_HYSTERESIS_RAW     32        /* 温度滞回值：2°C * 16 = 32 raw 单位 */
 
+/* 三种植物的默认阈值预设（植物类型、湿度下限、湿度上限、温度下限、温度上限） */
 static const threshold_config_t PRESETS[3] = {
-  { 0, 20, 40, 10, 38 },
-  { 1, 30, 60, 15, 35 },
-  { 2, 50, 80, 18, 32 },
+  { 0, 20, 40, 10, 38 },   /* 类型0：耐旱植物 */
+  { 1, 30, 60, 15, 35 },   /* 类型1：通用植物 */
+  { 2, 50, 80, 18, 32 },   /* 类型2：喜湿植物 */
 };
 
-volatile control_state_t g_ctrl;
+volatile control_state_t g_ctrl;            /* 全局控制状态结构体 */
 
-static uint32_t g_ctrl_tick = 0U;
-static uint32_t g_alarm_tick = 0U;
+static uint32_t g_ctrl_tick = 0U;           /* 控制周期计时戳 */
+static uint32_t g_alarm_tick = 0U;          /* 报警翻转计时戳 */
 
+/* 内部函数前向声明 */
 static void control_auto_logic(void);
 static void control_update_led(void);
 static void control_update_alarm(void);
 static void control_log_status_change(sys_status_t old_st);
 
+/* 初始化控制模块：加载阈值、置初始状态、关闭所有执行器 */
 void control_init(void)
 {
   data_store_load_thresholds((threshold_config_t *)&g_ctrl.thresh);
@@ -55,8 +58,9 @@ void control_init(void)
   debug_uart_send_line("[CTRL] Init: AUTO mode");
 }
 
-/* -------- main control task -------- */
+/* ========== 主循环控制任务：采集传感器、执行自动逻辑、更新指示 ========== */
 
+/* 主循环任务：定时采集传感器数据，执行自动控制，更新 LED 与蜂鸣器 */
 void control_task(void)
 {
   uint32_t now = HAL_GetTick();
@@ -82,8 +86,9 @@ void control_task(void)
   control_update_alarm();
 }
 
-/* -------- auto control with hysteresis -------- */
+/* ========== 自动控制逻辑（带滞回）：水泵/风扇启停、状态判定、报警标志 ========== */
 
+/* 自动控制逻辑：带滞回的水泵/风扇启停、系统状态优先级判定、报警标志设置 */
 static void control_auto_logic(void)
 {
   sys_status_t old_st = g_ctrl.status;
@@ -92,7 +97,7 @@ static void control_auto_logic(void)
   int16_t  temp_low_raw  = (int16_t)g_ctrl.thresh.temp_low * 16;
   int16_t  temp_high_raw = (int16_t)g_ctrl.thresh.temp_high * 16;
 
-  /* --- soil / pump: on below soil_low%, off at soil_high% --- */
+  /* --- 土壤/水泵：土壤湿度低于低限值时开启，达到土壤湿度高限值时关闭 --- */
   if (soil_pct < g_ctrl.thresh.soil_low)
   {
     if (!g_ctrl.pump_on)
@@ -112,7 +117,7 @@ static void control_auto_logic(void)
     }
   }
 
-  /* --- temp / fan: on above temp_high, off with hysteresis --- */
+  /* --- 温度/风扇：温度高于高温阈值时开启，带滞回控制关闭 --- */
   if (ds18b20_is_valid())
   {
     if (temp > temp_high_raw)
@@ -135,7 +140,7 @@ static void control_auto_logic(void)
     }
   }
 
-  /* --- status priority: extreme dry > over-temp > low-temp > dry warn > normal ---
+  /* --- 状态优先级：极度干燥 > 超温 > 低温 > 干燥预警 > 正常 ---
      spec (3): 三色LED 红=缺水 蓝=低温 绿=正常; 报警=极端干燥 或 超温 */
   if (soil_pct < g_ctrl.thresh.soil_low)
   {
@@ -169,8 +174,9 @@ static void control_auto_logic(void)
                           (ds18b20_is_valid() && temp > temp_high_raw)) ? 1U : 0U;
 }
 
-/* -------- LED indicator -------- */
+/* ========== LED 指示更新：根据当前状态控制红/绿/蓝三色灯 ========== */
 
+/* 更新三色 LED：根据系统状态显示对应颜色，异常时闪烁 */
 static void control_update_led(void)
 {
   if (g_ctrl.mode == SYS_MODE_SETTINGS)
@@ -215,8 +221,9 @@ static void control_update_led(void)
   }
 }
 
-/* -------- alarm buzzer -------- */
+/* ========== 报警蜂鸣器更新：报警时按周期翻转，静音或被抑制时关闭 ========== */
 
+/* 更新蜂鸣器：报警时按周期翻转，静音或被抑制时关闭 */
 static void control_update_alarm(void)
 {
   if (!g_ctrl.alarm_active || g_ctrl.alarm_muted)
@@ -233,8 +240,9 @@ static void control_update_alarm(void)
   }
 }
 
-/* -------- key handler -------- */
+/* ========== 按键处理：运行模式切换、手动控制、设置模式参数调节 ========== */
 
+/* 按键事件分发：设置模式下调节阈值，运行模式下切换模式/手动控制/静音 */
 void control_key_handler(void)
 {
   key_event_t evt;
@@ -243,7 +251,7 @@ void control_key_handler(void)
   {
     if (g_ctrl.mode == SYS_MODE_SETTINGS)
     {
-      /* --- settings mode keys --- */
+      /* --- 设置模式按键处理 --- */
       switch (evt)
       {
         case KEY_EVENT_1_PRESSED:
@@ -311,7 +319,7 @@ void control_key_handler(void)
     }
     else
     {
-      /* --- run mode keys --- */
+      /* --- 运行模式按键处理 --- */
       switch (evt)
       {
         case KEY_EVENT_1_PRESSED:
@@ -390,8 +398,9 @@ void control_key_handler(void)
   }
 }
 
-/* -------- debug log -------- */
+/* ========== 状态变化日志输出 ========== */
 
+/* 系统状态变化时通过调试串口输出日志 */
 static void control_log_status_change(sys_status_t old_st)
 {
   (void)old_st;

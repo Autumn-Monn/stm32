@@ -8,15 +8,15 @@
 extern UART_HandleTypeDef huart1;
 
 /* ---- 时间常数 ---- */
-#define ESP_RX_BUF_SIZE    512U
-#define HW_RESET_LOW_MS    100U
-#define HW_RESET_BOOT_MS   2000U
-#define RECONNECT_DELAY_MS 5000U
-#define AT_RETRY_MAX       3U
-#define CWJAP_RETRY_MAX    2U
-#define MQTT_CONN_RETRY_MAX  2U
-#define MQTT_SETTLE_MS       500U
-#define MQTT_PUB_TIMEOUT_MS 6000U
+#define ESP_RX_BUF_SIZE    512U       // 接收缓冲区大小
+#define HW_RESET_LOW_MS    100U       // 硬件复位拉低时间
+#define HW_RESET_BOOT_MS   2000U      // 硬件复位后等待 ESP8266 启动时间
+#define RECONNECT_DELAY_MS 5000U      // 重连延迟时间
+#define AT_RETRY_MAX       3U         // AT 命令重试次数
+#define CWJAP_RETRY_MAX    2U         // AT+CWJAP 重试次数
+#define MQTT_CONN_RETRY_MAX  2U       // AT+MQTTCONN 重试次数
+#define MQTT_SETTLE_MS       500U     // MQTT 连接稳定等待时间
+#define MQTT_PUB_TIMEOUT_MS 6000U     // MQTTPUBRAW 命令超时等待时间
 
 /* ---- RX 线性缓冲区 ---- */
 static uint8_t           g_rx_byte;

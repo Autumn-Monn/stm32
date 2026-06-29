@@ -27,18 +27,18 @@ typedef enum
 
 typedef struct
 {
-  sys_mode_t   mode;
-  sys_status_t status;
-  uint8_t      pump_on;
-  uint8_t      fan_on;
-  uint8_t      alarm_active;
-  uint8_t      alarm_muted;
-  int16_t      temp_raw;
-  uint16_t     soil_val;
-  uint8_t      soil_pct;
-  threshold_config_t thresh;
-  uint8_t      setting_index;
-  threshold_config_t setting_buf;
+  sys_mode_t   mode;  // 当前系统模式
+  sys_status_t status;  // 当前系统状态
+  uint8_t      pump_on; // 水泵状态
+  uint8_t      fan_on;  // 风扇状态
+  uint8_t      alarm_active; // 报警标志
+  uint8_t      alarm_muted; // 静音标志
+  int16_t      temp_raw; // 温度原始值
+  uint16_t     soil_val; // 土壤湿度值
+  uint8_t      soil_pct; // 土壤湿度百分比    
+  threshold_config_t thresh; // 阈值配置
+  uint8_t      setting_index; // 当前设置索引
+  threshold_config_t setting_buf; // 设置模式下的临时阈值缓冲区
 } control_state_t;
 
 extern volatile control_state_t g_ctrl;
